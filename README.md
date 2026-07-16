@@ -95,13 +95,29 @@ python -m pip install -r requirements-asr.txt
 
 模型由对应 ASR 库在首次使用时下载到其默认缓存目录。应用本身不携带模型。
 
-## Windows 便携版
+## Windows 安装版与便携版
+
+普通用户推荐从 [Releases](https://github.com/W1nge/BiliTranscript/releases) 下载安装版：
+
+```text
+BiliTranscript-0.3.0-setup-win-x64.exe
+```
+
+安装版默认安装到当前用户的程序目录，无需管理员权限；它会创建开始菜单入口，并可选创建桌面快捷方式，同时提供标准卸载程序。卸载应用不会删除 `%LOCALAPPDATA%\BiliTranscript\browser-profile` 中的专用浏览器登录资料。
+
+构建安装版需要先安装 Inno Setup 6 或 7：
+
+```powershell
+build-installer.bat
+```
+
+只构建便携目录时运行：
 
 ```powershell
 build.bat
 ```
 
-输出位于 `dist\BiliTranscript\BiliTranscript.exe`。便携版包含桌面界面和字幕提取核心，不内置大型 ASR 模型；它会调用电脑上已有的 ASR Python 环境。
+安装器输出为 `dist\BiliTranscript-0.3.0-setup-win-x64.exe`，便携版输出位于 `dist\BiliTranscript\BiliTranscript.exe`。两者都包含桌面界面和字幕提取核心，不内置大型 ASR 模型；应用会调用电脑上已有的 ASR Python 环境。
 
 ## 测试
 
