@@ -1,0 +1,3 @@
+# Optional. The desktop UI also detects a PATH Python that already has this package.
+faster-whisper>=1.1,<2
+
