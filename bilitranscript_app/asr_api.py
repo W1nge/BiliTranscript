@@ -99,6 +99,19 @@ class OpenAICompatibleAsrRuntime:
                     detail = str(payload.get("message") or payload.get("detail") or detail)
         return f"ASR API 请求失败（HTTP {status}）：{detail or '服务器未返回具体原因'}"
 
+    @staticmethod
+    def _connection_failure(endpoint: str, exc: BaseException) -> AsrError:
+        winerror = getattr(exc, "winerror", None)
+        refused = isinstance(exc, ConnectionRefusedError) or winerror == 10061 or 10061 in getattr(exc, "args", ())
+        if refused:
+            health_url = endpoint
+            return AsrError(
+                f"无法连接 ASR API（{endpoint}）：端口没有服务监听。\n"
+                "请确认 CrisperWeaver 已启动、已加载 MiMo，并在“本地 HTTP 服务器（OpenAI 兼容）”中打开“运行服务器”。\n"
+                f"检查命令：curl.exe {health_url}"
+            )
+        return AsrError(f"无法连接 ASR API：{exc}")
+
     def health(self, settings: AsrApiSettings) -> str:
         endpoint = self._endpoint(settings.base_url, "health", root=True)
         parsed = urlsplit(endpoint)
@@ -125,7 +138,7 @@ class OpenAICompatibleAsrRuntime:
         except AsrError:
             raise
         except (OSError, socket.timeout, http.client.HTTPException) as exc:
-            raise AsrError(f"无法连接 ASR API：{exc}") from exc
+            raise self._connection_failure(endpoint, exc) from exc
         finally:
             connection.close()
 
@@ -280,7 +293,8 @@ class OpenAICompatibleAsrRuntime:
         except AsrError:
             raise
         except (OSError, socket.timeout, http.client.HTTPException) as exc:
-            raise AsrError(f"无法连接 ASR API：{exc}") from exc
+            health_endpoint = self._endpoint(settings.base_url, "health", root=True)
+            raise self._connection_failure(health_endpoint, exc) from exc
         finally:
             connection.close()
 

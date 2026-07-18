@@ -108,6 +108,14 @@ class AsrApiTests(unittest.TestCase):
         self.assertEqual(runtime.normalize_base_url("127.0.0.1:8765"), "http://127.0.0.1:8765/v1")
         self.assertEqual(runtime._endpoint(self.base_url, "health", root=True), self.base_url[:-2] + "health")
 
+    def test_connection_refused_has_actionable_message(self) -> None:
+        error = OpenAICompatibleAsrRuntime._connection_failure(
+            "http://127.0.0.1:8765/health",
+            ConnectionRefusedError(10061, "refused"),
+        )
+        self.assertIn("端口没有服务监听", str(error))
+        self.assertIn("curl.exe", str(error))
+
     def test_health_and_multipart_transcription(self) -> None:
         runtime = OpenAICompatibleAsrRuntime()
         settings = AsrApiSettings(self.base_url, "test-key", timeout_seconds=30)

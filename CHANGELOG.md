@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.5.1 — 2026-07-19
+
+- 改进 ASR API 连接失败提示：针对端口未监听的 `WinError 10061` 显示 CrisperWeaver 启动条件和 `/health` 检查命令。
+
 ## 0.5.0 — 2026-07-19
 
 - 新增 OpenAI 兼容 ASR API 后端，可连接 CrisperWeaver / MiMo 等本地服务。
