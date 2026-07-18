@@ -1,5 +1,5 @@
 #define MyAppName "Bili 文稿"
-#define MyAppVersion "0.4.0"
+#define MyAppVersion "0.5.0"
 #define MyAppPublisher "W1nge"
 #define MyAppURL "https://github.com/W1nge/BiliTranscript"
 #define MyAppExeName "BiliTranscript.exe"

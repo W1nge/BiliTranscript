@@ -10,6 +10,15 @@ from pathlib import Path
 from typing import Any, Callable, TypeVar
 
 from .asr import AsrCancelled, AsrError, ExternalAsrRuntime
+from .asr_api import (
+    ASR_API_BACKEND,
+    DEFAULT_ASR_API_BASE_URL,
+    DEFAULT_ASR_API_KEY,
+    DEFAULT_ASR_API_MODEL,
+    DEFAULT_ASR_API_TIMEOUT,
+    AsrApiSettings,
+    OpenAICompatibleAsrRuntime,
+)
 from .bilibili import BilibiliClient, BilibiliError, CancelledError, SubtitleProbe, SubtitleTrack
 from .browser_bridge import StandaloneBrowserBridge
 from .models import (
@@ -40,7 +49,7 @@ ROUTE_LABELS = {
     "public": "公开字幕",
     "anonymous": "匿名接口",
     "browser": "登录浏览器",
-    "asr": "本地 ASR",
+    "asr": "ASR",
 }
 
 
@@ -55,9 +64,12 @@ class RetryPolicy:
 class ExtractionOptions:
     mode: str = "auto"  # auto, public, anonymous, browser, subtitles, asr
     browser_ai: bool = True
-    asr_backend: str = "auto"
+    asr_backend: str = "auto"  # auto, faster-whisper, funasr, openai-whisper, openai-compatible
     asr_model: str = ""
     language: str = "zh"
+    asr_api_base_url: str = DEFAULT_ASR_API_BASE_URL
+    asr_api_key: str = DEFAULT_ASR_API_KEY
+    asr_api_timeout: float = DEFAULT_ASR_API_TIMEOUT
 
 
 @dataclass(frozen=True, slots=True)
@@ -77,11 +89,13 @@ class TranscriptExtractor:
         client: BilibiliClient | None = None,
         browser_bridge: StandaloneBrowserBridge | None = None,
         asr_runtime: ExternalAsrRuntime | None = None,
+        api_runtime: OpenAICompatibleAsrRuntime | None = None,
         retry_policy: RetryPolicy | None = None,
     ) -> None:
         self.client = client or BilibiliClient()
         self.browser_bridge = browser_bridge or StandaloneBrowserBridge()
         self.asr_runtime = asr_runtime or ExternalAsrRuntime()
+        self.api_runtime = api_runtime or OpenAICompatibleAsrRuntime()
         self.retry_policy = retry_policy or RetryPolicy()
 
     @staticmethod
@@ -308,7 +322,7 @@ class TranscriptExtractor:
     def _convert_to_wav(audio: Path, output: Path, cancelled: Callable[[], bool]) -> Path:
         ffmpeg = shutil.which("ffmpeg") or shutil.which("ffmpeg.exe")
         if not ffmpeg:
-            raise AsrError("FunASR / OpenAI Whisper 需要 ffmpeg，请先安装 ffmpeg 或改用 Faster-Whisper")
+            raise AsrError("FunASR、OpenAI Whisper 和 API ASR 需要 ffmpeg，请先安装 ffmpeg 或改用 Faster-Whisper")
         process = subprocess.Popen(
             [ffmpeg, "-hide_banner", "-loglevel", "error", "-y", "-i", str(audio), "-ar", "16000", "-ac", "1", str(output)],
             stdout=subprocess.DEVNULL,
@@ -335,18 +349,38 @@ class TranscriptExtractor:
         progress: Callable[[int, str], None],
         log: Callable[[str], None],
     ) -> PartTranscript:
-        availability = self.asr_runtime.detect()
-        if not availability.available:
-            raise AsrError(
-                "没有可用的本地 ASR。可安装 faster-whisper，或先点击“登录浏览器”登录 B站后重试。"
-            )
         backend = options.asr_backend
-        if backend == "auto":
-            backend = next(
-                (item for item in ("faster-whisper", "funasr", "openai-whisper") if item in availability.backends),
-                "",
-            )
-        log(f"P{part.page}：字幕来源全部不可用，改用 {backend} 本地转写")
+        if backend != ASR_API_BACKEND:
+            availability = self.asr_runtime.detect()
+            if not availability.available:
+                if backend == "auto":
+                    try:
+                        self.api_runtime.health(
+                            AsrApiSettings(
+                                base_url=options.asr_api_base_url,
+                                api_key=options.asr_api_key,
+                                timeout_seconds=options.asr_api_timeout,
+                            )
+                        )
+                    except AsrError as exc:
+                        raise AsrError(
+                            "没有可用的本地 ASR，且 OpenAI 兼容 API 也不可用。请安装本地引擎或启动 API 服务。"
+                        ) from exc
+                    backend = ASR_API_BACKEND
+                    log(f"P{part.page}：本地 ASR 不可用，改用 OpenAI 兼容 ASR API")
+                else:
+                    raise AsrError(
+                        "没有可用的本地 ASR。可安装 faster-whisper 或 FunASR，或切换到 OpenAI 兼容 API。"
+                    )
+            if backend == "auto":
+                backend = next(
+                    (item for item in ("faster-whisper", "funasr", "openai-whisper") if item in availability.backends),
+                    "",
+                )
+        if backend == ASR_API_BACKEND:
+            log(f"P{part.page}：使用 OpenAI 兼容 ASR API（{options.asr_api_base_url}）")
+        else:
+            log(f"P{part.page}：字幕来源全部不可用，改用 {backend} 本地转写")
         audio_path = work_dir / f"p{part.page:02d}_{part.cid}.m4s"
 
         def download_progress(received: int, total: int) -> None:
@@ -374,6 +408,32 @@ class TranscriptExtractor:
         )
         if not downloaded:
             raise AsrError(f"音频连续两次不可用：{detail}")
+
+        if backend == ASR_API_BACKEND:
+            api_input = audio_path
+            if audio_path.suffix.lower() not in {".wav", ".mp3", ".mp4", ".mpeg", ".mpga", ".m4a", ".webm", ".ogg", ".flac"}:
+                progress(38, "正在转换 API 音频格式")
+                api_input = self._convert_to_wav(audio_path, work_dir / f"p{part.page:02d}_{part.cid}.wav", cancelled)
+            result = self.api_runtime.transcribe(
+                api_input,
+                AsrApiSettings(
+                    base_url=options.asr_api_base_url,
+                    api_key=options.asr_api_key,
+                    timeout_seconds=options.asr_api_timeout,
+                ),
+                model=options.asr_model or DEFAULT_ASR_API_MODEL,
+                language=options.language,
+                duration=float(part.duration),
+                cancelled=cancelled,
+                progress=progress,
+                log=log,
+            )
+            return PartTranscript(
+                part=part,
+                source="OpenAI 兼容 API ASR",
+                language=result.language,
+                segments=result.segments,
+            )
 
         asr_input = audio_path
         if backend in {"funasr", "openai-whisper"}:
@@ -412,9 +472,37 @@ class TranscriptExtractor:
         video: VideoInfo,
         part: VideoPart,
         *,
+        options: ExtractionOptions | None = None,
         cancelled: Callable[[], bool],
         log: Callable[[str], None],
     ) -> RouteAvailability:
+        if options and options.asr_backend in {"auto", ASR_API_BACKEND}:
+            settings = AsrApiSettings(
+                base_url=options.asr_api_base_url,
+                api_key=options.asr_api_key,
+                timeout_seconds=options.asr_api_timeout,
+            )
+            local_available = self.asr_runtime.detect().available
+            if options.asr_backend == ASR_API_BACKEND or not local_available:
+                if not shutil.which("ffmpeg") and not shutil.which("ffmpeg.exe"):
+                    return RouteAvailability("asr", False, "API ASR 需要 ffmpeg 将 B站音频转换为 WAV")
+                _, attempts, detail = self._retry_value(
+                    lambda: self.api_runtime.health(settings),
+                    success=lambda value: bool(value),
+                    description=f"P{part.page} ASR API 服务探测",
+                    cancelled=cancelled,
+                    log=log,
+                    retry_exceptions=(AsrError, OSError),
+                )
+                if detail and attempts:
+                    if options.asr_backend == ASR_API_BACKEND:
+                        return RouteAvailability("asr", False, detail, attempts=attempts)
+                    if not local_available:
+                        return RouteAvailability("asr", False, detail, attempts=attempts)
+                if options.asr_backend == ASR_API_BACKEND:
+                    return RouteAvailability("asr", True, "ASR API 服务可用", attempts=attempts)
+                if not local_available:
+                    return RouteAvailability("asr", True, "ASR API 服务可用（本地引擎不可用）", attempts=attempts)
         availability = self.asr_runtime.detect()
         if not availability.available:
             return RouteAvailability("asr", False, "未安装 Faster-Whisper、FunASR 或 OpenAI Whisper")
@@ -435,6 +523,7 @@ class TranscriptExtractor:
         video: VideoInfo,
         parts: list[VideoPart],
         *,
+        options: ExtractionOptions | None = None,
         cancelled: Callable[[], bool],
         progress: Callable[[int, str], None],
         log: Callable[[str], None],
@@ -460,8 +549,8 @@ class TranscriptExtractor:
                 else:
                     routes.append(RouteAvailability(route, False, probe.detail or "不可用", probe.attempts, 0))
                 completed_steps += 1
-            progress(int(completed_steps / total_steps * 100), f"P{part.page} · 检测本地 ASR")
-            routes.append(self._probe_asr(video, part, cancelled=cancelled, log=log))
+            progress(int(completed_steps / total_steps * 100), f"P{part.page} · 检测 ASR")
+            routes.append(self._probe_asr(video, part, options=options, cancelled=cancelled, log=log))
             completed_steps += 1
             results.append(PartAvailability(part=part, routes=tuple(routes)))
         progress(100, f"检测完成：{len(results)} 个分P")

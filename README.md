@@ -11,7 +11,7 @@
 1. 请求 `/x/player/v2`，优先读取 B站公开字幕；
 2. 请求匿名 `/x/player/wbi/v2`，处理公开接口只给出 `ai-zh` 元数据的情况；
 3. 前两步没有有效中文字幕时，通过应用自行启动的专用 Edge / Chrome / Brave 登录窗口请求播放器 AI 字幕；
-4. 所有 B站字幕都不可得时，才下载音频并调用本机 ASR；
+4. 所有 B站字幕都不可得时，才下载音频并调用本机 ASR 或配置的 API ASR；
 5. 只保留文稿结果，临时音频会在任务结束后删除。
 
 每个来源最多尝试 **2 次**。第一次请求失败、没有字幕 URL、字幕正文下载失败或正文为空时，固定等待 **1 秒**再试；第二次仍失败才进入下一来源。智能排序为：
@@ -71,12 +71,13 @@
 - 支持从混合文本批量识别链接，并行提取后分别导出 Markdown
 - 多分P勾选与部分成功保留
 - 每分P四来源可用性检测与明确失败原因
-- 五种模式：智能、公开、匿名、登录浏览器、本地 ASR
+- 五种模式：智能、公开、匿名、登录浏览器、ASR（本地引擎或 API）
+- 支持 OpenAI 兼容 ASR API，可接入 CrisperWeaver / MiMo 等本地服务
 - 独立发现并启动 Microsoft Edge、Google Chrome 或 Brave，不依赖 Codex
 - 可选 Faster-Whisper、FunASR / SenseVoice、OpenAI Whisper
 - 文稿预览可切换时间戳
 - 导出 Markdown、TXT、SRT、JSON
-- 网络请求仅使用 Python 标准库；ASR 在独立本地 Python 进程运行
+- B站和 API 请求仅使用 Python 标准库；本地 ASR 在独立 Python 进程运行
 - 提取期间可取消；临时音频不持久化，登录状态仅保存在专用浏览器配置中
 
 ## 直接运行源码
@@ -108,12 +109,31 @@ python -m pip install -r requirements-asr.txt
 
 模型由对应 ASR 库在首次使用时下载到其默认缓存目录。应用本身不携带模型。
 
+## 使用 OpenAI 兼容 API ASR
+
+在软件中选择“只用 ASR”或“智能提取”，将 ASR 后端切换为“OpenAI 兼容 API（MiMo）”，点击“API 设置…”确认地址和密钥。默认配置为：
+
+```text
+Base URL: http://127.0.0.1:8765/v1
+API Key:  local
+模型:     mimo-asr
+语言:     zh
+```
+
+以 CrisperWeaver 为例，需要先在它的设置中加载 MiMo 模型，并打开“本地 HTTP 服务器（OpenAI 兼容）→运行服务器”。应用的“测试连接”会请求 `http://127.0.0.1:8765/health`；服务必须保持运行。
+
+应用使用 `POST /v1/audio/transcriptions`，以 multipart 方式发送 `file`、`model`、`language=zh` 和 `response_format=verbose_json`，兼容返回带 `segments` 的 JSON 和只返回 `text` 的服务。B站下载的 `.m4s` 音频会先转换为 WAV，因此 API ASR 需要 PATH 中存在 `ffmpeg`。
+
+API 后端不读取或加载模型，`model` 参数只是兼容 OpenAI 格式，实际使用 API 服务中已经加载的模型。为符合 CrisperWeaver 的限制，同一时间的 API 转录请求会在应用内串行处理；批量任务仍可并行下载和处理其他非 API 来源。
+
+选择“自动检测”时，应用优先使用已安装的本地 ASR；本地引擎不可用时会自动尝试上述 API 服务。手动选择 API 后则只调用 API，不会启动本地 Python ASR。
+
 ## Windows 安装版与便携版
 
 普通用户推荐从 [Releases](https://github.com/W1nge/BiliTranscript/releases) 下载安装版：
 
 ```text
-BiliTranscript-0.4.0-setup-win-x64.exe
+BiliTranscript-0.5.0-setup-win-x64.exe
 ```
 
 安装版默认安装到当前用户的程序目录，无需管理员权限；它会创建开始菜单入口，并可选创建桌面快捷方式，同时提供标准卸载程序。卸载应用不会删除 `%LOCALAPPDATA%\BiliTranscript\browser-profile` 中的专用浏览器登录资料。
@@ -130,7 +150,7 @@ build-installer.bat
 build.bat
 ```
 
-安装器输出为 `dist\BiliTranscript-0.4.0-setup-win-x64.exe`，便携版输出位于 `dist\BiliTranscript\BiliTranscript.exe`。两者都包含桌面界面和字幕提取核心，不内置大型 ASR 模型；应用会调用电脑上已有的 ASR Python 环境。
+安装器输出为 `dist\BiliTranscript-0.5.0-setup-win-x64.exe`，便携版输出位于 `dist\BiliTranscript\BiliTranscript.exe`。两者都包含桌面界面和字幕提取核心，不内置大型 ASR 模型；应用会调用电脑上已有的 ASR Python 环境。
 
 ## 测试
 

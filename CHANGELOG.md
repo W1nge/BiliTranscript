@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.5.0 — 2026-07-19
+
+- 新增 OpenAI 兼容 ASR API 后端，可连接 CrisperWeaver / MiMo 等本地服务。
+- 新增 API 地址、密钥设置和 `/health` 连接测试；默认 `http://127.0.0.1:8765/v1`、`mimo-asr`、`zh`。
+- 支持 `verbose_json` 分段响应和纯文本响应；API 请求取消、超时和错误会显示明确提示。
+- 自动检测在本地 ASR 不可用时会尝试 API；手动选择 API 时不会启动本地 Python ASR。
+
 ## 0.4.0 — 2026-07-19
 
 - 新增批量处理：从混合文本识别 B站链接、BV 号和 av 号，按出现顺序去重。

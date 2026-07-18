@@ -60,10 +60,11 @@ class AvailabilityTask(QThread):
     failed = Signal(str)
     cancelled = Signal()
 
-    def __init__(self, video: VideoInfo, parts: list[VideoPart], parent=None) -> None:
+    def __init__(self, video: VideoInfo, parts: list[VideoPart], parent=None, *, options: ExtractionOptions | None = None) -> None:
         super().__init__(parent)
         self.video = video
         self.parts = parts
+        self.options = options
         self._cancel_event = threading.Event()
 
     def cancel(self) -> None:
@@ -74,6 +75,7 @@ class AvailabilityTask(QThread):
             result = TranscriptExtractor().probe_availability(
                 self.video,
                 self.parts,
+                options=self.options,
                 cancelled=self._cancel_event.is_set,
                 progress=lambda value, message: self.progress_changed.emit(value, message),
                 log=lambda message: self.log_message.emit(message),

@@ -8,8 +8,11 @@ from PySide6.QtWidgets import (
     QApplication,
     QCheckBox,
     QComboBox,
+    QDialog,
+    QDialogButtonBox,
     QFileDialog,
     QFrame,
+    QFormLayout,
     QHBoxLayout,
     QLabel,
     QLineEdit,
@@ -26,6 +29,16 @@ from PySide6.QtWidgets import (
 )
 
 from . import __version__
+from .asr import AsrError
+from .asr_api import (
+    ASR_API_BACKEND,
+    DEFAULT_ASR_API_BASE_URL,
+    DEFAULT_ASR_API_KEY,
+    DEFAULT_ASR_API_MODEL,
+    DEFAULT_ASR_API_TIMEOUT,
+    AsrApiSettings,
+    OpenAICompatibleAsrRuntime,
+)
 from .batch import BatchDialog, extract_bilibili_sources
 from .extractor import ExtractionOptions
 from .models import (
@@ -50,6 +63,86 @@ class SourceLineEdit(QLineEdit):
                 self.multiple_pasted.emit(text)
                 return
         super().keyPressEvent(event)
+
+
+class AsrApiSettingsDialog(QDialog):
+    def __init__(self, base_url: str, api_key: str, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self.setWindowTitle("ASR API 设置")
+        self.setMinimumWidth(500)
+
+        root = QVBoxLayout(self)
+        root.setContentsMargins(22, 20, 22, 20)
+        root.setSpacing(12)
+
+        title = QLabel("OpenAI 兼容 ASR API")
+        title.setObjectName("appTitle")
+        root.addWidget(title)
+        hint = QLabel(
+            "适用于 CrisperWeaver / MiMo 等 OpenAI 兼容服务。\n"
+            "服务端需要保持运行；默认地址为 http://127.0.0.1:8765。"
+        )
+        hint.setObjectName("meta")
+        hint.setWordWrap(True)
+        root.addWidget(hint)
+
+        form = QFormLayout()
+        form.setHorizontalSpacing(12)
+        form.setVerticalSpacing(10)
+        self.base_url_edit = QLineEdit(base_url or DEFAULT_ASR_API_BASE_URL)
+        self.base_url_edit.setPlaceholderText(DEFAULT_ASR_API_BASE_URL)
+        self.base_url_edit.setToolTip("可填写根地址或带 /v1 的地址，程序会自动规范化")
+        form.addRow("Base URL", self.base_url_edit)
+        self.api_key_edit = QLineEdit(api_key or DEFAULT_ASR_API_KEY)
+        self.api_key_edit.setEchoMode(QLineEdit.EchoMode.Password)
+        self.api_key_edit.setPlaceholderText(DEFAULT_ASR_API_KEY)
+        self.api_key_edit.setToolTip("本地 CrisperWeaver 通常填写 local；无鉴权服务可留空")
+        form.addRow("API Key", self.api_key_edit)
+        root.addLayout(form)
+
+        self.test_button = QPushButton("测试连接")
+        self.test_button.clicked.connect(self._test_connection)
+        root.addWidget(self.test_button, 0, Qt.AlignmentFlag.AlignLeft)
+
+        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
+        buttons.accepted.connect(self._accept_settings)
+        buttons.rejected.connect(self.reject)
+        root.addWidget(buttons)
+
+    def _settings(self) -> AsrApiSettings:
+        return AsrApiSettings(
+            base_url=self.base_url_edit.text().strip() or DEFAULT_ASR_API_BASE_URL,
+            api_key=self.api_key_edit.text().strip(),
+        )
+
+    def _test_connection(self) -> None:
+        self.test_button.setEnabled(False)
+        detail = ""
+        try:
+            detail = OpenAICompatibleAsrRuntime().health(self._settings())
+        except AsrError as exc:
+            QMessageBox.critical(self, "ASR API 连接失败", str(exc))
+        finally:
+            self.test_button.setEnabled(True)
+        if detail:
+            QMessageBox.information(self, "ASR API 可用", detail)
+
+    def _accept_settings(self) -> None:
+        try:
+            normalized = OpenAICompatibleAsrRuntime.normalize_base_url(self._settings().base_url)
+        except AsrError as exc:
+            QMessageBox.warning(self, "API 地址无效", str(exc))
+            return
+        self.base_url_edit.setText(normalized)
+        self.accept()
+
+    @property
+    def base_url(self) -> str:
+        return self._settings().base_url
+
+    @property
+    def api_key(self) -> str:
+        return self._settings().api_key
 
 
 class PartRow(QFrame):
@@ -185,7 +278,7 @@ class MainWindow(QMainWindow):
         layout.addLayout(text)
         layout.addStretch(1)
 
-        privacy = QLabel("独立运行 · 不复制 Cookie · ASR 本地运行")
+        privacy = QLabel("独立运行 · 不复制 Cookie · ASR 本地或 API")
         privacy.setObjectName("privacyPill")
         privacy.setToolTip("登录状态保存在应用专用浏览器配置中；Python 进程不会读取或复制 Cookie")
         layout.addWidget(privacy)
@@ -255,7 +348,7 @@ class MainWindow(QMainWindow):
         part_header.addWidget(part_title)
         part_header.addStretch(1)
         self.detect_button = QPushButton("检测方式")
-        self.detect_button.setToolTip("对选中分P检测公开、匿名、登录浏览器和本地 ASR")
+        self.detect_button.setToolTip("对选中分P检测公开、匿名、登录浏览器和当前 ASR 后端")
         self.detect_button.clicked.connect(self._detect_availability)
         self.detect_button.setEnabled(False)
         part_header.addWidget(self.detect_button)
@@ -301,7 +394,7 @@ class MainWindow(QMainWindow):
         self.mode_combo.addItem("只用公开字幕", "public")
         self.mode_combo.addItem("只用匿名接口", "anonymous")
         self.mode_combo.addItem("只用登录浏览器", "browser")
-        self.mode_combo.addItem("只用本地 ASR", "asr")
+        self.mode_combo.addItem("只用 ASR", "asr")
         self.mode_combo.setToolTip("智能提取会逐来源尝试两次，失败间隔 1 秒，再按固定顺序下降")
         self.mode_combo.currentIndexChanged.connect(self._mode_changed)
         route_row.addWidget(self.mode_combo, 1)
@@ -314,8 +407,13 @@ class MainWindow(QMainWindow):
         self.backend_combo.addItem("Faster-Whisper", "faster-whisper")
         self.backend_combo.addItem("FunASR / SenseVoice", "funasr")
         self.backend_combo.addItem("OpenAI Whisper", "openai-whisper")
+        self.backend_combo.addItem("OpenAI 兼容 API（MiMo）", ASR_API_BACKEND)
         self.backend_combo.currentIndexChanged.connect(self._update_model_choices)
         backend_row.addWidget(self.backend_combo, 1)
+        self.api_settings_button = QPushButton("API 设置…")
+        self.api_settings_button.setToolTip("设置 API 地址、密钥并测试本地服务")
+        self.api_settings_button.clicked.connect(self._open_api_settings)
+        backend_row.addWidget(self.api_settings_button)
         options_layout.addLayout(backend_row)
 
         model_row = QHBoxLayout()
@@ -337,7 +435,7 @@ class MainWindow(QMainWindow):
         self.login_browser_button.clicked.connect(self._open_login_browser)
         login_row.addWidget(self.login_browser_button)
         options_layout.addLayout(login_row)
-        hint = QLabel("每个来源最多尝试 2 次，失败后等待 1 秒；登录一次会复用专用配置。")
+        hint = QLabel("每个来源最多尝试 2 次，失败后等待 1 秒；API ASR 需要保持服务运行。")
         hint.setObjectName("meta")
         hint.setWordWrap(True)
         options_layout.addWidget(hint)
@@ -421,8 +519,8 @@ class MainWindow(QMainWindow):
             "关于 Bili 文稿",
             f"<b>Bili 文稿 {__version__}</b><br><br>"
             "只做一件事：从 B站视频提取完整文稿。<br>"
-            "固定顺序：公开字幕、匿名播放器接口、专用登录浏览器、本地 ASR。<br>"
-            "支持批量识别链接，并行分别导出 Markdown。<br>"
+            "固定顺序：公开字幕、匿名播放器接口、专用登录浏览器、ASR。<br>"
+            "支持本地 ASR 或 OpenAI 兼容 API ASR，也支持批量识别链接。<br>"
             "每个来源最多两次，失败后间隔 1 秒再下降。<br><br>"
             "本应用是非官方工具，不隶属于哔哩哔哩。",
         )
@@ -431,12 +529,35 @@ class MainWindow(QMainWindow):
         model = self.model_combo.currentData()
         if model is None:
             model = self.model_combo.currentText().strip()
+        base_url = self.settings.value("asr/api_base_url", DEFAULT_ASR_API_BASE_URL)
+        api_key = self.settings.value("asr/api_key", DEFAULT_ASR_API_KEY)
+        timeout = self.settings.value("asr/api_timeout", DEFAULT_ASR_API_TIMEOUT)
+        try:
+            api_timeout = float(timeout)
+        except (TypeError, ValueError):
+            api_timeout = DEFAULT_ASR_API_TIMEOUT
         return ExtractionOptions(
             mode=str(self.mode_combo.currentData()),
             browser_ai=True,
             asr_backend=str(self.backend_combo.currentData()),
             asr_model=str(model or ""),
+            asr_api_base_url=str(base_url or DEFAULT_ASR_API_BASE_URL),
+            asr_api_key=DEFAULT_ASR_API_KEY if api_key is None else str(api_key),
+            asr_api_timeout=api_timeout,
         )
+
+    def _open_api_settings(self) -> None:
+        saved_base_url = self.settings.value("asr/api_base_url", DEFAULT_ASR_API_BASE_URL)
+        saved_api_key = self.settings.value("asr/api_key", DEFAULT_ASR_API_KEY)
+        dialog = AsrApiSettingsDialog(
+            str(saved_base_url or DEFAULT_ASR_API_BASE_URL),
+            DEFAULT_ASR_API_KEY if saved_api_key is None else str(saved_api_key),
+            self,
+        )
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            self.settings.setValue("asr/api_base_url", dialog.base_url)
+            self.settings.setValue("asr/api_key", dialog.api_key)
+            self.status_label.setText(f"已保存 ASR API：{dialog.base_url}")
 
     def _open_batch_dialog(self, initial_text: str = "") -> None:
         if self.metadata_task or self.browser_task or self.browser_status_task or self.availability_task or self.extraction_task:
@@ -646,7 +767,7 @@ class MainWindow(QMainWindow):
                 row.set_status("等待检测", "muted")
         self._set_busy(True, "准备检测可用方式…", cancellable=True)
         self.progress.setRange(0, 100)
-        task = AvailabilityTask(self.video, parts, self)
+        task = AvailabilityTask(self.video, parts, self, options=self._current_extraction_options())
         self.availability_task = task
         task.progress_changed.connect(self._availability_progress)
         task.log_message.connect(self._log_message)
@@ -709,6 +830,7 @@ class MainWindow(QMainWindow):
         asr_enabled = mode in {"auto", "asr"}
         self.backend_combo.setEnabled(asr_enabled)
         self.model_combo.setEnabled(asr_enabled)
+        self.api_settings_button.setEnabled(asr_enabled and self.backend_combo.currentData() == ASR_API_BACKEND)
 
     def _update_model_choices(self) -> None:
         backend = self.backend_combo.currentData() if hasattr(self, "backend_combo") else "auto"
@@ -727,6 +849,7 @@ class MainWindow(QMainWindow):
                 ("medium", "medium"),
                 ("large", "large"),
             ],
+            ASR_API_BACKEND: [("mimo-asr（CrisperWeaver）", DEFAULT_ASR_API_MODEL)],
         }
         if not hasattr(self, "model_combo"):
             return
@@ -758,6 +881,8 @@ class MainWindow(QMainWindow):
         options = self._current_extraction_options()
         self.settings.setValue("extract/mode", options.mode)
         self.settings.setValue("extract/backend", options.asr_backend)
+        self.settings.setValue("asr/api_base_url", options.asr_api_base_url)
+        self.settings.setValue("asr/api_key", options.asr_api_key)
         self.bundle = None
         self.editor.clear()
         for row in self.part_rows.values():
@@ -849,6 +974,9 @@ class MainWindow(QMainWindow):
         mode = str(self.mode_combo.currentData())
         self.backend_combo.setEnabled(not busy and mode in {"auto", "asr"})
         self.model_combo.setEnabled(not busy and mode in {"auto", "asr"})
+        self.api_settings_button.setEnabled(
+            not busy and mode in {"auto", "asr"} and self.backend_combo.currentData() == ASR_API_BACKEND
+        )
         self.login_browser_button.setEnabled(not busy and not self.browser_task)
         self.check_login_button.setEnabled(not busy and not self.browser_status_task)
         self.cancel_button.setVisible(busy and cancellable)
@@ -875,6 +1003,11 @@ class MainWindow(QMainWindow):
         self.detect_button.setEnabled(not busy and bool(self.video) and has_selection)
         self.login_browser_button.setEnabled(not busy)
         self.check_login_button.setEnabled(not busy)
+        self.api_settings_button.setEnabled(
+            not busy
+            and str(self.mode_combo.currentData()) in {"auto", "asr"}
+            and self.backend_combo.currentData() == ASR_API_BACKEND
+        )
         self.copy_button.setEnabled(bool(self.bundle))
         self.save_button.setEnabled(bool(self.bundle))
         self.timestamps_check.setEnabled(bool(self.bundle))

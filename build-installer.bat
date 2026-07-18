@@ -40,5 +40,5 @@ if defined APP_SOURCE_DIR (
 )
 
 echo.
-echo Installer complete: dist\BiliTranscript-0.4.0-setup-win-x64.exe
+echo Installer complete: dist\BiliTranscript-0.5.0-setup-win-x64.exe
 endlocal

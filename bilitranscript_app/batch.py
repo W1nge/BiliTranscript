@@ -25,6 +25,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from .asr_api import ASR_API_BACKEND
 from .bilibili import BilibiliClient, CancelledError
 from .extractor import ExtractionError, ExtractionOptions, TranscriptExtractor
 from .models import VideoInfo, safe_filename
@@ -289,8 +290,10 @@ class BatchDialog(QDialog):
             "public": "只用公开字幕",
             "anonymous": "只用匿名接口",
             "browser": "只用登录浏览器",
-            "asr": "只用本地 ASR",
+            "asr": "只用 ASR",
         }.get(options.mode, options.mode)
+        if options.asr_backend == ASR_API_BACKEND:
+            mode_text += " · API ASR"
         mode_label = QLabel(mode_text)
         mode_label.setObjectName("metric")
         settings_row.addWidget(mode_label)
