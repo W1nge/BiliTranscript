@@ -53,9 +53,22 @@
 
 手动模式不会偷偷下降到其他来源。例如选择“只用匿名接口”时，不会请求公开字幕、登录浏览器或 ASR。
 
+## 批量提取
+
+点击主界面的“批量处理”，把包含多条 B站链接、BV 号、av 号或混合说明文字的内容一次粘贴进去。应用会自动识别、按出现顺序去重，并行读取每个视频的全部分P；单个视频失败不会中断其他任务。
+
+批量任务沿用当前窗口的提取方式和 ASR 设置，默认并行 3 个视频，可调整为 1–4 个。选择导出目录后点击“开始批量提取”，每个成功视频会自动写成独立文件：
+
+```text
+视频标题__BVxxxxxxxxxxx.md
+```
+
+主界面的“粘贴”按钮检测到剪贴板中有多条链接时，也会直接打开批量窗口。批量模式只自动导出 Markdown，不会覆盖已有同名文件；重复文件会追加序号。
+
 ## 功能
 
 - 支持完整 B站链接、`b23.tv` 短链接、BV 号和 av 号
+- 支持从混合文本批量识别链接，并行提取后分别导出 Markdown
 - 多分P勾选与部分成功保留
 - 每分P四来源可用性检测与明确失败原因
 - 五种模式：智能、公开、匿名、登录浏览器、本地 ASR
@@ -100,7 +113,7 @@ python -m pip install -r requirements-asr.txt
 普通用户推荐从 [Releases](https://github.com/W1nge/BiliTranscript/releases) 下载安装版：
 
 ```text
-BiliTranscript-0.3.0-setup-win-x64.exe
+BiliTranscript-0.4.0-setup-win-x64.exe
 ```
 
 安装版默认安装到当前用户的程序目录，无需管理员权限；它会创建开始菜单入口，并可选创建桌面快捷方式，同时提供标准卸载程序。卸载应用不会删除 `%LOCALAPPDATA%\BiliTranscript\browser-profile` 中的专用浏览器登录资料。
@@ -117,7 +130,7 @@ build-installer.bat
 build.bat
 ```
 
-安装器输出为 `dist\BiliTranscript-0.3.0-setup-win-x64.exe`，便携版输出位于 `dist\BiliTranscript\BiliTranscript.exe`。两者都包含桌面界面和字幕提取核心，不内置大型 ASR 模型；应用会调用电脑上已有的 ASR Python 环境。
+安装器输出为 `dist\BiliTranscript-0.4.0-setup-win-x64.exe`，便携版输出位于 `dist\BiliTranscript\BiliTranscript.exe`。两者都包含桌面界面和字幕提取核心，不内置大型 ASR 模型；应用会调用电脑上已有的 ASR Python 环境。
 
 ## 测试
 

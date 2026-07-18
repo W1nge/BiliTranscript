@@ -8,6 +8,7 @@ import shutil
 import socket
 import struct
 import subprocess
+import threading
 import time
 import urllib.error
 import urllib.parse
@@ -21,6 +22,7 @@ from .models import VideoInfo, VideoPart
 
 
 DEBUG_PORT = 39271
+BROWSER_FETCH_LOCK = threading.Lock()
 WEBSOCKET_GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
 BILIBILI_LOGIN_URL = "https://passport.bilibili.com/login"
 
@@ -419,6 +421,12 @@ class StandaloneBrowserBridge:
         return False, str(value.get("error") or "尚未登录 B站")
 
     def fetch_tracks(self, video: VideoInfo, part: VideoPart) -> tuple[SubtitleTrack, ...]:
+        # Multiple batch workers may share one browser profile and CDP port.
+        # Serialize only this fallback route; public/anonymous requests remain parallel.
+        with BROWSER_FETCH_LOCK:
+            return self._fetch_tracks_unlocked(video, part)
+
+    def _fetch_tracks_unlocked(self, video: VideoInfo, part: VideoPart) -> tuple[SubtitleTrack, ...]:
         self.last_error = ""
         if not self.is_running():
             self.last_error = "专用登录浏览器未启动"

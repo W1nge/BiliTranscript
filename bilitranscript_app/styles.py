@@ -24,7 +24,7 @@ APP_STYLE = f"""
     font-size: 13px;
     color: {COLORS['text']};
 }}
-QMainWindow, QWidget#appRoot {{
+QMainWindow, QDialog, QWidget#appRoot {{
     background: {COLORS['background']};
 }}
 QToolTip {{
@@ -72,7 +72,7 @@ QLabel#privacyPill {{
     border-radius: 11px;
     padding: 5px 10px;
 }}
-QLineEdit, QComboBox, QPlainTextEdit {{
+QLineEdit, QComboBox, QPlainTextEdit, QListWidget, QSpinBox {{
     background: {COLORS['surface_raised']};
     border: 1px solid {COLORS['border']};
     border-radius: 9px;
@@ -196,6 +196,12 @@ QPlainTextEdit#transcriptEditor {{
     background: #13161B;
     padding: 15px;
 }}
+QListWidget::item {{
+    padding: 6px 8px;
+}}
+QListWidget::item:selected {{
+    background: #3A2731;
+}}
 QProgressBar {{
     min-height: 5px;
     max-height: 5px;
@@ -215,4 +221,3 @@ QMessageBox {{
     background: {COLORS['surface']};
 }}
 """
-

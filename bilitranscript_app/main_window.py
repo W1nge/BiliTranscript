@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from PySide6.QtCore import QSettings, QStandardPaths, QTimer, Qt, Signal
-from PySide6.QtGui import QCloseEvent, QDragEnterEvent, QDropEvent
+from PySide6.QtGui import QCloseEvent, QDragEnterEvent, QDropEvent, QKeySequence
 from PySide6.QtWidgets import (
     QApplication,
     QCheckBox,
@@ -26,6 +26,7 @@ from PySide6.QtWidgets import (
 )
 
 from . import __version__
+from .batch import BatchDialog, extract_bilibili_sources
 from .extractor import ExtractionOptions
 from .models import (
     AvailabilityReport,
@@ -37,6 +38,18 @@ from .models import (
     safe_filename,
 )
 from .workers import AvailabilityTask, BrowserLaunchTask, BrowserStatusTask, ExtractionTask, MetadataTask
+
+
+class SourceLineEdit(QLineEdit):
+    multiple_pasted = Signal(str)
+
+    def keyPressEvent(self, event) -> None:
+        if event.matches(QKeySequence.StandardKey.Paste):
+            text = QApplication.clipboard().text()
+            if len(extract_bilibili_sources(text)) > 1:
+                self.multiple_pasted.emit(text)
+                return
+        super().keyPressEvent(event)
 
 
 class PartRow(QFrame):
@@ -129,6 +142,7 @@ class MainWindow(QMainWindow):
         self.browser_status_task: BrowserStatusTask | None = None
         self.availability_task: AvailabilityTask | None = None
         self.extraction_task: ExtractionTask | None = None
+        self.batch_dialog: BatchDialog | None = None
         self._close_requested = False
 
         root = QWidget()
@@ -188,7 +202,8 @@ class MainWindow(QMainWindow):
         layout = QHBoxLayout(card)
         layout.setContentsMargins(14, 13, 14, 13)
         layout.setSpacing(9)
-        self.url_input = QLineEdit()
+        self.url_input = SourceLineEdit()
+        self.url_input.multiple_pasted.connect(self._open_batch_dialog)
         self.url_input.setPlaceholderText("粘贴 B站视频链接、b23.tv 短链接或 BV 号…")
         self.url_input.setClearButtonEnabled(True)
         self.url_input.returnPressed.connect(self._fetch_video)
@@ -200,6 +215,10 @@ class MainWindow(QMainWindow):
         self.fetch_button.setObjectName("primaryButton")
         self.fetch_button.clicked.connect(self._fetch_video)
         layout.addWidget(self.fetch_button)
+        self.batch_button = QPushButton("批量处理")
+        self.batch_button.setToolTip("粘贴多条 B站链接，并行提取后分别导出 Markdown")
+        self.batch_button.clicked.connect(self._open_batch_dialog)
+        layout.addWidget(self.batch_button)
         return card
 
     def _build_workspace(self) -> QSplitter:
@@ -403,12 +422,42 @@ class MainWindow(QMainWindow):
             f"<b>Bili 文稿 {__version__}</b><br><br>"
             "只做一件事：从 B站视频提取完整文稿。<br>"
             "固定顺序：公开字幕、匿名播放器接口、专用登录浏览器、本地 ASR。<br>"
+            "支持批量识别链接，并行分别导出 Markdown。<br>"
             "每个来源最多两次，失败后间隔 1 秒再下降。<br><br>"
             "本应用是非官方工具，不隶属于哔哩哔哩。",
         )
 
+    def _current_extraction_options(self) -> ExtractionOptions:
+        model = self.model_combo.currentData()
+        if model is None:
+            model = self.model_combo.currentText().strip()
+        return ExtractionOptions(
+            mode=str(self.mode_combo.currentData()),
+            browser_ai=True,
+            asr_backend=str(self.backend_combo.currentData()),
+            asr_model=str(model or ""),
+        )
+
+    def _open_batch_dialog(self, initial_text: str = "") -> None:
+        if self.metadata_task or self.browser_task or self.browser_status_task or self.availability_task or self.extraction_task:
+            return
+        if self.batch_dialog and self.batch_dialog.isVisible():
+            self.batch_dialog.raise_()
+            self.batch_dialog.activateWindow()
+            return
+        if not initial_text:
+            clipboard_text = QApplication.clipboard().text()
+            if len(extract_bilibili_sources(clipboard_text)) > 1:
+                initial_text = clipboard_text
+        dialog = BatchDialog(self._current_extraction_options(), initial_text, self)
+        self.batch_dialog = dialog
+        try:
+            dialog.exec()
+        finally:
+            self.batch_dialog = None
+
     def _open_login_browser(self) -> None:
-        if self.browser_task or self.browser_status_task or self.metadata_task or self.availability_task or self.extraction_task:
+        if self.batch_dialog or self.browser_task or self.browser_status_task or self.metadata_task or self.availability_task or self.extraction_task:
             return
         destination = self.video.url if self.video else None
         self.login_browser_button.setEnabled(False)
@@ -457,7 +506,7 @@ class MainWindow(QMainWindow):
         self.login_status_label.setStyleSheet(f"color: {colors.get(kind, colors['muted'])};")
 
     def _check_login_status(self) -> None:
-        if self.browser_status_task or self.browser_task or self.metadata_task or self.availability_task or self.extraction_task:
+        if self.batch_dialog or self.browser_status_task or self.browser_task or self.metadata_task or self.availability_task or self.extraction_task:
             return
         self.check_login_button.setEnabled(False)
         self._set_login_status("检查中…", "working")
@@ -492,20 +541,33 @@ class MainWindow(QMainWindow):
         self.status_label.setText(message)
         self._update_actions()
 
-    def _paste_url(self) -> None:
+    def _paste_url(self) -> bool:
         text = QApplication.clipboard().text().strip()
         if text:
+            if len(extract_bilibili_sources(text)) > 1:
+                self._open_batch_dialog(text)
+                return True
             self.url_input.setText(text)
             self.url_input.setFocus()
+            return True
+        return False
 
     def _fetch_video(self) -> None:
         source = self.url_input.text().strip()
         if not source:
-            self._paste_url()
+            pasted = self._paste_url()
             source = self.url_input.text().strip()
+            if pasted and not source:
+                return
         if not source:
             self._show_error("请先粘贴 B站视频链接或 BV 号")
             return
+        sources = extract_bilibili_sources(source)
+        if len(sources) > 1:
+            self._open_batch_dialog(source)
+            return
+        if len(sources) == 1:
+            source = sources[0]
         if self.metadata_task or self.browser_task or self.browser_status_task or self.availability_task or self.extraction_task:
             return
         self._set_busy(True, "正在读取视频信息…", indeterminate=True)
@@ -693,15 +755,7 @@ class MainWindow(QMainWindow):
         if not parts:
             self._show_error("请至少选择一个分P")
             return
-        model = self.model_combo.currentData()
-        if model is None:
-            model = self.model_combo.currentText().strip()
-        options = ExtractionOptions(
-            mode=str(self.mode_combo.currentData()),
-            browser_ai=True,
-            asr_backend=str(self.backend_combo.currentData()),
-            asr_model=str(model or ""),
-        )
+        options = self._current_extraction_options()
         self.settings.setValue("extract/mode", options.mode)
         self.settings.setValue("extract/backend", options.asr_backend)
         self.bundle = None
@@ -785,6 +839,7 @@ class MainWindow(QMainWindow):
         self.status_label.setText(message)
         self.url_input.setEnabled(not busy)
         self.fetch_button.setEnabled(not busy)
+        self.batch_button.setEnabled(not busy)
         self.extract_button.setEnabled(not busy and bool(self.video) and bool(self._selected_parts()))
         self.select_all.setEnabled(not busy and bool(self.part_rows))
         self.detect_button.setEnabled(not busy and bool(self.video) and bool(self._selected_parts()))
@@ -815,6 +870,7 @@ class MainWindow(QMainWindow):
         )
         has_selection = bool(self._selected_parts())
         self.fetch_button.setEnabled(not busy)
+        self.batch_button.setEnabled(not busy)
         self.extract_button.setEnabled(not busy and bool(self.video) and has_selection)
         self.detect_button.setEnabled(not busy and bool(self.video) and has_selection)
         self.login_browser_button.setEnabled(not busy)
@@ -895,7 +951,10 @@ class MainWindow(QMainWindow):
     def dropEvent(self, event: QDropEvent) -> None:
         text = event.mimeData().text().strip()
         if text:
-            self.url_input.setText(text.splitlines()[0])
+            if len(extract_bilibili_sources(text)) > 1:
+                self._open_batch_dialog(text)
+            else:
+                self.url_input.setText(text.splitlines()[0])
             event.acceptProposedAction()
 
     def closeEvent(self, event: QCloseEvent) -> None:
