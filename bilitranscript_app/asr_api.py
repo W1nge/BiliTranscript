@@ -21,7 +21,7 @@ ASR_API_BACKEND = "openai-compatible"
 DEFAULT_ASR_API_BASE_URL = "http://127.0.0.1:8765/v1"
 DEFAULT_ASR_API_KEY = "local"
 DEFAULT_ASR_API_MODEL = "mimo-asr"
-DEFAULT_ASR_API_TIMEOUT = 900.0
+DEFAULT_ASR_API_TIMEOUT = 3600.0
 
 
 @dataclass(frozen=True, slots=True)

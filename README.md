@@ -126,6 +126,8 @@ API Key:  local
 
 API 后端不读取或加载模型，`model` 参数只是兼容 OpenAI 格式，实际使用 API 服务中已经加载的模型。为符合 CrisperWeaver 的限制，同一时间的 API 转录请求会在应用内串行处理；批量任务仍可并行下载和处理其他非 API 来源。
 
+API 音频转录的默认总超时为 **1 小时（3600 秒）**；健康检查仍为 8 秒，连接建立仍为 15 秒。
+
 选择“自动检测”时，应用优先使用已安装的本地 ASR；本地引擎不可用时会自动尝试上述 API 服务。手动选择 API 后则只调用 API，不会启动本地 Python ASR。
 
 ## Windows 安装版与便携版
@@ -133,7 +135,7 @@ API 后端不读取或加载模型，`model` 参数只是兼容 OpenAI 格式，
 普通用户推荐从 [Releases](https://github.com/W1nge/BiliTranscript/releases) 下载安装版：
 
 ```text
-BiliTranscript-0.5.1-setup-win-x64.exe
+BiliTranscript-0.5.2-setup-win-x64.exe
 ```
 
 安装版默认安装到当前用户的程序目录，无需管理员权限；它会创建开始菜单入口，并可选创建桌面快捷方式，同时提供标准卸载程序。卸载应用不会删除 `%LOCALAPPDATA%\BiliTranscript\browser-profile` 中的专用浏览器登录资料。
@@ -150,7 +152,7 @@ build-installer.bat
 build.bat
 ```
 
-安装器输出为 `dist\BiliTranscript-0.5.1-setup-win-x64.exe`，便携版输出位于 `dist\BiliTranscript\BiliTranscript.exe`。两者都包含桌面界面和字幕提取核心，不内置大型 ASR 模型；应用会调用电脑上已有的 ASR Python 环境。
+安装器输出为 `dist\BiliTranscript-0.5.2-setup-win-x64.exe`，便携版输出位于 `dist\BiliTranscript\BiliTranscript.exe`。两者都包含桌面界面和字幕提取核心，不内置大型 ASR 模型；应用会调用电脑上已有的 ASR Python 环境。
 
 ## 测试
 

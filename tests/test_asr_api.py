@@ -13,6 +13,7 @@ from bilitranscript_app.asr import AsrAvailability, AsrResult
 from bilitranscript_app.asr_api import (
     ASR_API_BACKEND,
     AsrApiSettings,
+    DEFAULT_ASR_API_TIMEOUT,
     OpenAICompatibleAsrRuntime,
 )
 from bilitranscript_app.extractor import ExtractionOptions, TranscriptExtractor
@@ -107,6 +108,10 @@ class AsrApiTests(unittest.TestCase):
         runtime = OpenAICompatibleAsrRuntime()
         self.assertEqual(runtime.normalize_base_url("127.0.0.1:8765"), "http://127.0.0.1:8765/v1")
         self.assertEqual(runtime._endpoint(self.base_url, "health", root=True), self.base_url[:-2] + "health")
+
+    def test_default_transcription_timeout_is_one_hour(self) -> None:
+        self.assertEqual(DEFAULT_ASR_API_TIMEOUT, 3600.0)
+        self.assertEqual(AsrApiSettings().timeout_seconds, 3600.0)
 
     def test_connection_refused_has_actionable_message(self) -> None:
         error = OpenAICompatibleAsrRuntime._connection_failure(
