@@ -7,7 +7,7 @@ import threading
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable, TypeVar
+from typing import Callable, TypeVar
 
 from .asr import AsrCancelled, AsrError, ExternalAsrRuntime
 from .asr_api import (

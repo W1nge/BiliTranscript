@@ -57,6 +57,16 @@ class VideoPart:
             duration=int(payload.get("duration") or 0),
         )
 
+    @classmethod
+    def from_dict(cls, payload: dict[str, Any]) -> "VideoPart":
+        """Recreate a part from the persisted TranscriptBundle schema."""
+        return cls(
+            page=int(payload.get("page") or 1),
+            cid=int(payload.get("cid") or 0),
+            title=str(payload.get("title") or payload.get("part") or "P1"),
+            duration=int(payload.get("duration") or 0),
+        )
+
 
 @dataclass(frozen=True, slots=True)
 class VideoInfo:
@@ -97,6 +107,22 @@ class VideoInfo:
             published_at=int(data.get("pubdate") or 0),
             description=str(data.get("desc") or ""),
             parts=pages,
+        )
+
+    @classmethod
+    def from_dict(cls, payload: dict[str, Any]) -> "VideoInfo":
+        """Recreate video metadata saved by :meth:`TranscriptBundle.to_dict`."""
+        parts = tuple(VideoPart.from_dict(item) for item in (payload.get("parts") or []))
+        return cls(
+            bvid=str(payload.get("bvid") or ""),
+            aid=int(payload.get("aid") or 0),
+            title=str(payload.get("title") or "未命名视频"),
+            owner=str(payload.get("owner") or "未知 UP 主"),
+            duration=int(payload.get("duration") or 0),
+            cover_url=str(payload.get("cover_url") or payload.get("pic") or ""),
+            published_at=int(payload.get("published_at") or payload.get("pubdate") or 0),
+            description=str(payload.get("description") or payload.get("desc") or ""),
+            parts=parts,
         )
 
 
@@ -149,6 +175,17 @@ class PartTranscript:
             ).normalized()
             segments.append(segment)
         return cls(part=part, source=source, language=language, segments=tuple(segments))
+
+    @classmethod
+    def from_dict(cls, payload: dict[str, Any]) -> "PartTranscript":
+        part = VideoPart.from_dict(payload)
+        segments = combine_segments(payload.get("segments") or ())
+        return cls(
+            part=part,
+            source=str(payload.get("source") or "未知来源"),
+            language=str(payload.get("language") or "zh"),
+            segments=segments,
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -279,6 +316,18 @@ class TranscriptBundle:
                 "title": self.video.title,
                 "owner": self.video.owner,
                 "duration": self.video.duration,
+                "cover_url": self.video.cover_url,
+                "published_at": self.video.published_at,
+                "description": self.video.description,
+                "parts": [
+                    {
+                        "page": part.page,
+                        "cid": part.cid,
+                        "title": part.title,
+                        "duration": part.duration,
+                    }
+                    for part in self.video.parts
+                ],
                 "url": self.video.url,
             },
             "parts": [
@@ -296,6 +345,59 @@ class TranscriptBundle:
             ],
             "issues": [asdict(issue) for issue in self.issues],
         }
+
+    @classmethod
+    def from_dict(cls, payload: dict[str, Any]) -> "TranscriptBundle":
+        """Deserialize the stable JSON schema used by the REST API and history DB.
+
+        Unknown fields are intentionally ignored so newer bundles remain readable by
+        older desktop builds.  Segment values are normalized by ``from_dict``.
+        """
+        if not isinstance(payload, dict):
+            raise TypeError("TranscriptBundle payload must be an object")
+        video_payload = payload.get("video") or {}
+        if not isinstance(video_payload, dict):
+            raise ValueError("TranscriptBundle.video must be an object")
+        parts_payload = payload.get("parts") or []
+        if not isinstance(parts_payload, list):
+            raise ValueError("TranscriptBundle.parts must be an array")
+        issues_payload = payload.get("issues") or []
+        parts = [PartTranscript.from_dict(item) for item in parts_payload if isinstance(item, dict)]
+        video = VideoInfo.from_dict(video_payload)
+        # The v1 wire schema did not duplicate part metadata under ``video``.
+        # Reconstruct it from transcript rows so result/history views still know
+        # the original total number of pages.
+        if not video.parts and parts:
+            video = VideoInfo(
+                bvid=video.bvid,
+                aid=video.aid,
+                title=video.title,
+                owner=video.owner,
+                duration=video.duration,
+                cover_url=video.cover_url,
+                published_at=video.published_at,
+                description=video.description,
+                parts=tuple(item.part for item in parts),
+            )
+        issues = [
+            ExtractionIssue(
+                page=int(item.get("page") or 1),
+                title=str(item.get("title") or ""),
+                message=str(item.get("message") or ""),
+            )
+            for item in issues_payload
+            if isinstance(item, dict)
+        ]
+        return cls(
+            video=video,
+            parts=parts,
+            issues=issues,
+            created_at=str(payload.get("created_at") or datetime.now(timezone.utc).astimezone().isoformat(timespec="seconds")),
+        )
+
+    @classmethod
+    def from_json(cls, value: str) -> "TranscriptBundle":
+        return cls.from_dict(json.loads(value))
 
     def to_json(self) -> str:
         return json.dumps(self.to_dict(), ensure_ascii=False, indent=2) + "\n"

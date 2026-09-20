@@ -9,10 +9,17 @@ datas = [
     (str(root / "assets" / "bilitranscript.png"), "assets"),
     (str(root / "bilitranscript_app" / "asr_worker.py"), "bilitranscript_app"),
     (str(root / "README.md"), "."),
+    (str(root / "API.md"), "."),
     (str(root / "LICENSE"), "."),
     (str(root / "NOTICE.md"), "."),
     (str(root / "CHANGELOG.md"), "."),
 ]
+native_backdrop = root / "bilitranscript_app" / "native" / "win-x64"
+datas.extend(
+    (str(path), "bilitranscript_app/native/win-x64")
+    for path in native_backdrop.iterdir()
+    if path.is_file()
+)
 
 a = Analysis(
     [str(root / "bilitranscript.py")],

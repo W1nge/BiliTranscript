@@ -7,7 +7,6 @@ import shutil
 import subprocess
 import sys
 import threading
-import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
@@ -224,4 +223,3 @@ class ExternalAsrRuntime:
             language=str(payload.get("language") or language),
             segments=segments,
         )
-

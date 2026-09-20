@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0-windows10.0.19041.0</TargetFramework>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <PlatformTarget>x64</PlatformTarget>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <PublishAot>true</PublishAot>
+    <NativeLib>Shared</NativeLib>
+    <SelfContained>true</SelfContained>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <IlcGenerateStackTraceData>false</IlcGenerateStackTraceData>
+    <StripSymbols>true</StripSymbols>
+    <CsWinRTIncludes>Microsoft.Graphics.Canvas.Effects.GaussianBlurEffect;Microsoft.Graphics.Canvas.Effects.IGaussianBlurEffect;Microsoft.Graphics.Canvas.Effects.SaturationEffect;Microsoft.Graphics.Canvas.Effects.ISaturationEffect;Microsoft.Graphics.Canvas.Effects.ICanvasEffect;Microsoft.Graphics.Canvas.Effects.EffectBorderMode;Microsoft.Graphics.Canvas.Effects.EffectOptimization;Microsoft.Graphics.Canvas.Effects.EffectChannelSelect;Microsoft.Graphics.Canvas.ICanvasImage;Microsoft.Graphics.Canvas.ICanvasResourceCreator;Microsoft.Graphics.Canvas.ICanvasResourceCreatorWithDpi;Microsoft.Graphics.Canvas.ICanvasDevice;Microsoft.Graphics.Canvas.ICanvasLock;Microsoft.Graphics.Canvas.CanvasDevice;Microsoft.Graphics.Canvas.CanvasBufferPrecision;Microsoft.Graphics.Canvas.CanvasBitmapFileFormat;Microsoft.Graphics.Canvas.CanvasDpiRounding;Microsoft.Graphics.Canvas.CanvasDebugLevel;Microsoft.Graphics.Canvas.CanvasImageInterpolation;Microsoft.Graphics.Canvas.CanvasLock</CsWinRTIncludes>
+    <CsWinRTWindowsMetadata>$(NuGetPackageRoot)microsoft.windows.sdk.net.ref\10.0.19041.56\winmd</CsWinRTWindowsMetadata>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Windows.CsWinRT" Version="2.3.1" PrivateAssets="all" />
+    <PackageDownload Include="Win2D.uwp" Version="[1.28.3]" />
+    <PackageDownload Include="Microsoft.VCRTForwarders.140" Version="[1.1.0]" />
+    <CsWinRTInputs Include="$(NuGetPackageRoot)win2d.uwp\1.28.3\lib\uap10.0\Microsoft.Graphics.Canvas.winmd" />
+    <None Include="$(NuGetPackageRoot)win2d.uwp\1.28.3\runtimes\win-x64\native\Microsoft.Graphics.Canvas.dll" Link="Microsoft.Graphics.Canvas.dll" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <None Include="$(NuGetPackageRoot)microsoft.vcrtforwarders.140\1.1.0\runtimes\win-x64\native\release\msvcp140_app.dll" Link="msvcp140_app.dll" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <None Include="$(NuGetPackageRoot)microsoft.vcrtforwarders.140\1.1.0\runtimes\win-x64\native\release\vcruntime140_1_app.dll" Link="vcruntime140_1_app.dll" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <None Include="$(NuGetPackageRoot)microsoft.vcrtforwarders.140\1.1.0\runtimes\win-x64\native\release\vcruntime140_app.dll" Link="vcruntime140_app.dll" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <None Include="BiliTranscript.Backdrop.manifest" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>

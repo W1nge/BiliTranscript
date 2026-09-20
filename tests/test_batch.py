@@ -5,10 +5,11 @@ import tempfile
 from pathlib import Path
 from unittest import mock
 
-from bilitranscript_app.batch import BatchExtractionTask, batch_output_filename, extract_bilibili_sources
+from bilitranscript_app.batch import BatchExtractionTask, batch_output_filename
 from bilitranscript_app.bilibili import BilibiliError
 from bilitranscript_app.extractor import ExtractionOptions
 from bilitranscript_app.models import PartTranscript, Segment, TranscriptBundle, VideoInfo, VideoPart
+from bilitranscript_app.sources import extract_bilibili_sources
 
 
 def batch_video(bvid: str, title: str) -> VideoInfo:

@@ -1,5 +1,5 @@
 #define MyAppName "Bili 文稿"
-#define MyAppVersion "0.5.2"
+#define MyAppVersion "1.0.0"
 #define MyAppPublisher "W1nge"
 #define MyAppURL "https://github.com/W1nge/BiliTranscript"
 #define MyAppExeName "BiliTranscript.exe"
@@ -59,3 +59,10 @@ Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; WorkingDi
 
 [Run]
 Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#StringChange(MyAppName, '&', '&&')}}"; WorkingDir: "{app}"; Flags: nowait postinstall skipifsilent
+
+[Code]
+procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
+begin
+  if CurUninstallStep = usUninstall then
+    RegDeleteValue(HKCU, 'Software\Microsoft\Windows\CurrentVersion\Run', 'BiliTranscript');
+end;

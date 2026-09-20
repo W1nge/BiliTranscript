@@ -1,13 +1,18 @@
 from __future__ import annotations
 
 import threading
+from typing import TYPE_CHECKING
 
 from PySide6.QtCore import QThread, Signal
 
+from .asr_api import AsrApiSettings, OpenAICompatibleAsrRuntime
 from .bilibili import BilibiliClient, CancelledError
 from .browser_bridge import StandaloneBrowserBridge
 from .extractor import ExtractionOptions, TranscriptExtractor
 from .models import VideoInfo, VideoPart
+
+if TYPE_CHECKING:
+    from .api_server import ExtractionApiServer
 
 
 class MetadataTask(QThread):
@@ -49,6 +54,23 @@ class BrowserStatusTask(QThread):
         try:
             logged_in, detail = StandaloneBrowserBridge().login_status()
             self.succeeded.emit(logged_in, detail)
+        except Exception as exc:
+            self.failed.emit(str(exc) or type(exc).__name__)
+
+
+class AsrHealthTask(QThread):
+    """Run the optional upstream health check without freezing the Qt UI."""
+
+    succeeded = Signal(str)
+    failed = Signal(str)
+
+    def __init__(self, settings: AsrApiSettings, parent=None) -> None:
+        super().__init__(parent)
+        self.settings = settings
+
+    def run(self) -> None:
+        try:
+            self.succeeded.emit(OpenAICompatibleAsrRuntime().health(self.settings))
         except Exception as exc:
             self.failed.emit(str(exc) or type(exc).__name__)
 
@@ -129,5 +151,19 @@ class ExtractionTask(QThread):
                 self.succeeded.emit(result)
         except CancelledError:
             self.cancelled.emit()
+        except Exception as exc:
+            self.failed.emit(str(exc) or type(exc).__name__)
+
+
+class ApiServerStopTask(QThread):
+    failed = Signal(str)
+
+    def __init__(self, server: "ExtractionApiServer", parent=None) -> None:
+        super().__init__(parent)
+        self.server = server
+
+    def run(self) -> None:
+        try:
+            self.server.stop(cancel_jobs=True, wait_for_jobs=True)
         except Exception as exc:
             self.failed.emit(str(exc) or type(exc).__name__)

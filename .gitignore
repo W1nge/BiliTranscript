@@ -4,6 +4,16 @@ __pycache__/
 .venv/
 build/
 dist/
+build-*/
+dist-*/
 *.spec.bak
 *.log
-
+native/windows_backdrop/bin/
+native/windows_backdrop/obj/
+native/windows_backdrop/publish/
+/BiliTranscript.Backdrop.dll
+/win-x64/
+/ui-preview-history.png
+/ui-preview-result.png
+/ui-preview-settings.png
+/ui-preview-working.png

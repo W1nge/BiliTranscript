@@ -73,7 +73,15 @@ class ModelTests(unittest.TestCase):
         self.assertEqual(payload["parts"][1]["text"], "第三句")
         self.assertEqual(bundle.character_count, 9)
 
+    def test_bundle_round_trip_restores_video_parts_and_segments(self) -> None:
+        part = VideoPart(1, 101, "第一段", 5)
+        video = VideoInfo("BV1abcdefghij", 1, "标题", "UP", 5, "", 0, "", (part,))
+        bundle = TranscriptBundle(video, [PartTranscript(part, "B站 AI 字幕", "zh", (Segment(0, 1, "你好"),))])
+        restored = TranscriptBundle.from_dict(bundle.to_dict())
+        self.assertEqual(restored.video.bvid, video.bvid)
+        self.assertEqual(restored.video.parts, (part,))
+        self.assertEqual(restored.parts[0].text, "你好")
+
 
 if __name__ == "__main__":
     unittest.main()
-

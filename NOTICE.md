@@ -12,3 +12,9 @@ Windows 安装包使用 Inno Setup 构建。`installer/Languages/ChineseSimplifi
 
 - Inno Setup source: https://github.com/jrsoftware/issrc
 - Chinese translation source blob: `0fced9759dd20e250101768985af511153133cdc`
+
+Windows Acrylic 背景桥接层使用 Microsoft Win2D 1.28.3，并随程序分发 Microsoft VCRT 140 App-Local DLL Forwarders 1.1.0。它们只负责 Windows Composition 的 GPU 合成效果，不参与视频或文稿处理。
+
+- Win2D project: https://github.com/microsoft/Win2D
+- Win2D license: https://www.microsoft.com/web/webpi/eula/eula_win2d_10012014.htm
+- VCRT Forwarders project and license: https://github.com/microsoft/vcrt-forwarders
